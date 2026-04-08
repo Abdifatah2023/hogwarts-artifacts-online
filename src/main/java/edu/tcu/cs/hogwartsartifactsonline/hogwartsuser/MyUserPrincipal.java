@@ -10,7 +10,7 @@ import java.util.Collection;
 
 public class MyUserPrincipal implements UserDetails {
 
-    private final HogwartsUser hogwartsUser;
+    private HogwartsUser hogwartsUser;
 
 
     public MyUserPrincipal(HogwartsUser hogwartsUser) {
