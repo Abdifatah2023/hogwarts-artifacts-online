@@ -59,7 +59,7 @@ public class WizardService {
         Artifact artifactToBeAssigned = this.artifactRepository.findById(artifactId)
                 .orElseThrow(() -> new ObjectNotFoundException("artifact", artifactId));
 
-        // Find this wizard by Id from DB.
+        // Find this wizard by Id fromm DB.
         Wizard wizard = this.wizardRepository.findById(wizardId)
                 .orElseThrow(() -> new ObjectNotFoundException("wizard", wizardId));
 
