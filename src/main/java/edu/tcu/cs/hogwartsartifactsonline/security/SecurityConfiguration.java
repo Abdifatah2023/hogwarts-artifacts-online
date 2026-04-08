@@ -7,7 +7,6 @@ import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,7 +19,10 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -44,14 +46,11 @@ public class SecurityConfiguration {
 
     private final CustomBearerTokenAccessDeniedHandler customBearerTokenAccessDeniedHandler;
 
-    private final UserRequestAuthorizationManager userRequestAuthorizationManager;
 
-
-    public SecurityConfiguration(CustomBasicAuthenticationEntryPoint customBasicAuthenticationEntryPoint, CustomBearerTokenAuthenticationEntryPoint customBearerTokenAuthenticationEntryPoint, CustomBearerTokenAccessDeniedHandler customBearerTokenAccessDeniedHandler, UserRequestAuthorizationManager userRequestAuthorizationManager) throws NoSuchAlgorithmException {
+    public SecurityConfiguration(CustomBasicAuthenticationEntryPoint customBasicAuthenticationEntryPoint, CustomBearerTokenAuthenticationEntryPoint customBearerTokenAuthenticationEntryPoint, CustomBearerTokenAccessDeniedHandler customBearerTokenAccessDeniedHandler) throws NoSuchAlgorithmException {
         this.customBasicAuthenticationEntryPoint = customBasicAuthenticationEntryPoint;
         this.customBearerTokenAuthenticationEntryPoint = customBearerTokenAuthenticationEntryPoint;
         this.customBearerTokenAccessDeniedHandler = customBearerTokenAccessDeniedHandler;
-        this.userRequestAuthorizationManager = userRequestAuthorizationManager;
 
         // Generate a public/private key pair.
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
@@ -67,25 +66,19 @@ public class SecurityConfiguration {
                 // It is recommended to secure your application at the API endpoint level.
                 .authorizeHttpRequests(authorizeHttpRequests -> authorizeHttpRequests
                         .requestMatchers(HttpMethod.GET, this.baseUrl + "/artifacts/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, this.baseUrl + "/artifacts/search").permitAll()
-                        .requestMatchers(HttpMethod.GET, this.baseUrl + "/users").hasAuthority("ROLE_admin") // Protect the endpoint.
-                        .requestMatchers(HttpMethod.GET, this.baseUrl + "/users/**").access(this.userRequestAuthorizationManager) // The authorization rule is defined in the UserRequestAuthorizationManager.
+                        .requestMatchers(HttpMethod.GET, this.baseUrl + "/users/**").hasAuthority("ROLE_admin") // Protect the endpoint.
                         .requestMatchers(HttpMethod.POST, this.baseUrl + "/users").hasAuthority("ROLE_admin") // Protect the endpoint.
-                        .requestMatchers(HttpMethod.PUT, this.baseUrl + "/users/**").access(this.userRequestAuthorizationManager) // The authorization rule is defined in the UserRequestAuthorizationManager.
+                        .requestMatchers(HttpMethod.PUT, this.baseUrl + "/users/**").hasAuthority("ROLE_admin") // Protect the endpoint.
                         .requestMatchers(HttpMethod.DELETE, this.baseUrl + "/users/**").hasAuthority("ROLE_admin") // Protect the endpoint.
-                        .requestMatchers(HttpMethod.PATCH, this.baseUrl + "/users/**").access(this.userRequestAuthorizationManager) // The authorization rule is defined in the UserRequestAuthorizationManager.
-                        .requestMatchers(EndpointRequest.to("health", "info", "prometheus")).permitAll()
-                        .requestMatchers(EndpointRequest.toAnyEndpoint().excluding("health", "info", "prometheus")).hasAuthority("ROLE_admin")
-                        .requestMatchers("/h2-console/**").permitAll() // Explicitly fallback to antMatcher inside requestMatchers.
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/h2-console/**")).permitAll() // Explicitly fallback to antMatcher inside requestMatchers.
                         // Disallow everything else.
                         .anyRequest().authenticated() // Always a good idea to put this as last.
                 )
-                .headers(headers -> headers.frameOptions(Customizer.withDefaults()).disable()) // This is for H2 browser console access.
+                .headers(headers -> headers.frameOptions().disable()) // This is for H2 browser console access.
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .httpBasic(httpBasic -> httpBasic.authenticationEntryPoint(this.customBasicAuthenticationEntryPoint))
-                .oauth2ResourceServer(oauth2ResourceServer -> oauth2ResourceServer
-                        .jwt(Customizer.withDefaults())
+                .oauth2ResourceServer(oauth2ResourceServer -> oauth2ResourceServer.jwt().and()
                         .authenticationEntryPoint(this.customBearerTokenAuthenticationEntryPoint)
                         .accessDeniedHandler(this.customBearerTokenAccessDeniedHandler))
                 /* Configures the spring boot application as an OAuth2 Resource Server which authenticates all
@@ -113,42 +106,25 @@ public class SecurityConfiguration {
         return NimbusJwtDecoder.withPublicKey(this.publicKey).build();
     }
 
-    /**
-     * Starting in Spring Boot 3.3.0, a JwtAuthenticationConverter is auto-configured if one of the properties is set:
-     * spring.security.oauth2.resourceserver.jwt.authority-prefix
-     * spring.security.oauth2.resourceserver.jwt.principal-claim-name
-     * spring.security.oauth2.resourceserver.jwt.authorities-claim-name
-     *
-     * So, you can remove this JwtAuthenticationConverter bean definition from your configuration and configure the properties instead.
-     * https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.3-Release-Notes#spring-security-improvements
-     *
-     * In application.yml, add this:
-     *   security:
-     *     oauth2:
-     *       resourceserver:
-     *         jwt:
-     *           authorities-claim-name: authorities
-     *           authority-prefix: ""
-     */
-//    @Bean
-//    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-//        JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-//
-//        /*
-//        Let’s say that that your authorization server communicates authorities in a custom claim called "authorities".
-//        In that case, you can configure the claim that JwtAuthenticationConverter should inspect, like so:
-//         */
-//        jwtGrantedAuthoritiesConverter.setAuthoritiesClaimName("authorities");
-//
-//        /*
-//        You can also configure the authority prefix to be different as well. The default one is "SCOPE_".
-//        In this project, you need to change it to empty, that is, no prefix!
-//         */
-//        jwtGrantedAuthoritiesConverter.setAuthorityPrefix("");
-//
-//        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-//        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwtGrantedAuthoritiesConverter);
-//        return jwtAuthenticationConverter;
-//    }
+    @Bean
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+
+        /*
+        Let’s say that that your authorization server communicates authorities in a custom claim called "authorities".
+        In that case, you can configure the claim that JwtAuthenticationConverter should inspect, like so:
+         */
+        jwtGrantedAuthoritiesConverter.setAuthoritiesClaimName("authorities");
+
+        /*
+        You can also configure the authority prefix to be different as well. The default one is "SCOPE_".
+        In this project, you need to change it to empty, that is, no prefix!
+         */
+        jwtGrantedAuthoritiesConverter.setAuthorityPrefix("");
+
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwtGrantedAuthoritiesConverter);
+        return jwtAuthenticationConverter;
+    }
 
 }

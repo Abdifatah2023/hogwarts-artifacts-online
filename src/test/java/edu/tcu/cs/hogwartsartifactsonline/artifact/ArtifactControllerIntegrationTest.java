@@ -1,7 +1,6 @@
 package edu.tcu.cs.hogwartsartifactsonline.artifact;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.redis.testcontainers.RedisContainer;
 import edu.tcu.cs.hogwartsartifactsonline.system.StatusCode;
 import org.hamcrest.Matchers;
 import org.json.JSONObject;
@@ -13,22 +12,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
-
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -36,11 +25,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @SpringBootTest
-@Testcontainers
 @AutoConfigureMockMvc
 @DisplayName("Integration tests for Artifact API endpoints")
 @Tag("integration")
-@ActiveProfiles(value = "dev")
 class ArtifactControllerIntegrationTest {
 
     @Autowired
@@ -53,10 +40,6 @@ class ArtifactControllerIntegrationTest {
 
     @Value("${api.endpoint.base-url}")
     String baseUrl;
-
-    @Container
-    @ServiceConnection
-    static RedisContainer redisContainer = new RedisContainer(DockerImageName.parse("redis:6.2.6"));
 
 
     @BeforeEach
@@ -79,7 +62,7 @@ class ArtifactControllerIntegrationTest {
                 .andExpect(jsonPath("$.flag").value(true))
                 .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
                 .andExpect(jsonPath("$.message").value("Find All Success"))
-                .andExpect(jsonPath("$.data.content", Matchers.hasSize(6)));
+                .andExpect(jsonPath("$.data", Matchers.hasSize(6)));
     }
 
     @Test
@@ -126,7 +109,7 @@ class ArtifactControllerIntegrationTest {
                 .andExpect(jsonPath("$.flag").value(true))
                 .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
                 .andExpect(jsonPath("$.message").value("Find All Success"))
-                .andExpect(jsonPath("$.data.content", Matchers.hasSize(7)));
+                .andExpect(jsonPath("$.data", Matchers.hasSize(7)));
     }
 
     @Test
@@ -151,7 +134,7 @@ class ArtifactControllerIntegrationTest {
                 .andExpect(jsonPath("$.flag").value(true))
                 .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
                 .andExpect(jsonPath("$.message").value("Find All Success"))
-                .andExpect(jsonPath("$.data.content", Matchers.hasSize(6)));
+                .andExpect(jsonPath("$.data", Matchers.hasSize(6)));
     }
 
     @Test
@@ -241,47 +224,6 @@ class ArtifactControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value(StatusCode.NOT_FOUND))
                 .andExpect(jsonPath("$.message").value("Could not find artifact with Id 1250808601744904199 :("))
                 .andExpect(jsonPath("$.data").isEmpty());
-    }
-
-    @Test
-    void testFindArtifactsByDescription() throws Exception {
-        // Given
-        Map<String, String> searchCriteria = new HashMap<>();
-        searchCriteria.put("description", "Hogwarts");
-        String json = this.objectMapper.writeValueAsString(searchCriteria);
-
-        MultiValueMap<String, String> requestParams = new LinkedMultiValueMap<>();
-        requestParams.add("page", "0");
-        requestParams.add("size", "2");
-        requestParams.add("sort", "name,asc");
-
-        // When and then
-        this.mockMvc.perform(post(this.baseUrl + "/artifacts/search").contentType(MediaType.APPLICATION_JSON).content(json).params(requestParams).accept(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.flag").value(true))
-                .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
-                .andExpect(jsonPath("$.message").value("Search Success"))
-                .andExpect(jsonPath("$.data.content", Matchers.hasSize(2)));
-    }
-
-    @Test
-    void testFindArtifactsByNameAndDescription() throws Exception {
-        // Given
-        Map<String, String> searchCriteria = new HashMap<>();
-        searchCriteria.put("name", "Sword");
-        searchCriteria.put("description", "Hogwarts");
-        String json = this.objectMapper.writeValueAsString(searchCriteria);
-
-        MultiValueMap<String, String> requestParams = new LinkedMultiValueMap<>();
-        requestParams.add("page", "0");
-        requestParams.add("size", "2");
-        requestParams.add("sort", "name,asc");
-
-        // When and then
-        this.mockMvc.perform(post(this.baseUrl + "/artifacts/search").contentType(MediaType.APPLICATION_JSON).content(json).params(requestParams).accept(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.flag").value(true))
-                .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
-                .andExpect(jsonPath("$.message").value("Search Success"))
-                .andExpect(jsonPath("$.data.content", Matchers.hasSize(1)));
     }
 
 }
